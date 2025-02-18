@@ -11,14 +11,15 @@ The script can be configured through the following environment variables:
 - `API_PASSWORD` - your Netcup API password
 - `CUSTOMER_NUMBER` - your Netcup customer number
 - `DOMAINS` - your Netcup domains that should be updated, separated by `,`
-- `RECORDS` - hostname-entries for the records that should be updated, separated by `,`, e.g. `@,mail`
-- `INTERVAL` - interval for the script to run, in seconds
+- `RECORDS` - hostname-entries for the records that should be updated, separated by `,` [default: `@,mail`]
+- `INTERVAL` - interval for the script to run, in seconds [default: `120`]
 
 ## Requirements
 
 ### Docker
 
-The script can be run in Docker using the provided Dockerfile.
+Image on Docker Hub: [gewuerznud3l/netcup-dyndns-update](https://hub.docker.com/repository/docker/gewuerznud3l/netcup-dyndns-update/general)
+The image can be built using the provided Dockerfile.
 
 ### Bare-Metal
 
