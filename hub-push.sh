@@ -1,3 +1,2 @@
 docker login
-docker build -t gewuerznud3l/netcup-dyndns-update:latest .
-docker push gewuerznud3l/netcup-dyndns-update:latest
+docker buildx build --push --platform linux/arm64,linux/amd64 -t gewuerznud3l/netcup-dyndns-update:latest .
