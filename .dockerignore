@@ -1,0 +1,5 @@
+.dockerignore
+.env
+Dockerfile
+README.md
+hub-push.sh
