@@ -13,6 +13,13 @@ The script can be configured through the following environment variables:
 - `DOMAINS` - your Netcup domains that should be updated, separated by `,`
 - `RECORDS` - hostname-entries for the records that should be updated, separated by `,` [default: `@,mail`]
 - `INTERVAL` - interval for the script to run, in seconds [default: `120`]
+- `LOG_LEVEL` - how much should be logged [default: `1`]
+    - `0` - debugging information and above
+    - `1` - informative logging and above
+    - `2` - warnings and above
+    - `3` - errors only
+    - `4` - silent
+- `DRY_RUN` - if `1`, don't actually update records. Only really useful with `LOG_LEVEL=0` [default: `0`]
 
 ## Requirements
 

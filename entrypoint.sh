@@ -19,19 +19,40 @@ log() {
 
     case $1 in
         i|info)
+            if [[ $LOG_LEVEL -gt 1 ]]; then
+                return 0
+            fi
             color="$blue"
             ;;
         w|warn)
+            if [[ $LOG_LEVEL -gt 2 ]]; then
+                return 0
+            fi
             color="$yellow"
             ;;
         e|error)
+            if [[ $LOG_LEVEL -gt 3 ]]; then
+                return 0
+            fi
             color="$red"
             file=/dev/stderr
             ;;
         s|success)
+            if [[ $LOG_LEVEL -gt 1 ]]; then
+                return 0
+            fi
             color="$green"
             ;;
+        d|debug)
+            if [[ $LOG_LEVEL -gt 0 ]]; then
+                return 0
+            fi
+            color="$normal"
+            ;;
         *)
+            if [[ $LOG_LEVEL -gt 1 ]]; then
+                return 0
+            fi
             color="$normal"
             ;;
     esac
@@ -39,15 +60,27 @@ log() {
     echo -e "$color$2$normal" 1>&3
 }
 
+# jq wrapper with error handling
+hjq() {
+    res=$(jq "$@")
+
+    if [[ $? -ne 0 ]]; then
+        log e "error executing command ${normal}jq $*"
+        kill -s TERM $TOP_PID
+    fi
+
+    echo "$res"
+}
+
 # params: res
 handle_error() {
     res="$1"
 
-    status=$(echo "$res" | jq -r ".status")
+    status=$(echo "$res" | hjq -r ".status")
     
-    shortmsg=$(echo "$res" | jq -r ".shortmessage")
+    shortmsg=$(echo "$res" | hjq -r ".shortmessage")
 
-    longmsg=$(echo "$res" | jq -r ".longmessage")
+    longmsg=$(echo "$res" | hjq -r ".longmessage")
     if [[ "$longmsg" == "null" ]]; then
         longmsg=""
     fi
@@ -58,6 +91,27 @@ handle_error() {
     fi
 }
 
+send_request() {
+    data=$1
+    dry=$2
+
+    log d "sending request:\n$(echo "$data" | hjq)"
+
+    if [[ $dry -eq 1 ]]; then
+        return 0;
+    fi
+
+    res=$(curl -s --location --request DELETE 'https://ccp.netcup.net/run/webservice/servers/endpoint.php?JSON' \
+        --header 'Content-Type: application/json' \
+        --data "$data")
+
+    log d "got response:\n$(echo "$res" | hjq)"
+    
+    handle_error "$res"
+
+    echo "$res"
+}
+
 login() {
     LOGIN_PAYLOAD=$(echo "{\
         \"action\": \"login\",\
@@ -66,15 +120,11 @@ login() {
             \"apikey\": \"${API_KEY}\",\
             \"apipassword\": \"${API_PASSWORD}\"\
         }\
-    }" | jq -c)
+    }" | hjq -c)
 
-    res=$(curl -s --location --request DELETE 'https://ccp.netcup.net/run/webservice/servers/endpoint.php?JSON' \
-        --header 'Content-Type: application/json' \
-        --data "$LOGIN_PAYLOAD")
+    res=$(send_request "$LOGIN_PAYLOAD")
     
-    handle_error "$res"
-    
-    echo "$res" | jq -r '.responsedata.apisessionid'
+    echo "$res" | hjq -r '.responsedata.apisessionid'
 }
 
 # params: sid domain
@@ -90,15 +140,11 @@ get_records() {
             \"apisessionid\": \"${sid}\",\
             \"domainname\": \"${domain}\"\
         }\
-    }" | jq -c)
+    }" | hjq -c)
 
-    res=$(curl -s --location --request DELETE 'https://ccp.netcup.net/run/webservice/servers/endpoint.php?JSON' \
-        --header 'Content-Type: application/json' \
-        --data "$INFO_PAYLOAD")
-    
-    handle_error "$res"
+    res=$(send_request "$INFO_PAYLOAD")
 
-    echo "$res" | jq '.responsedata.dnsrecords'
+    echo "$res" | hjq '.responsedata.dnsrecords'
 }
 
 # params: sid domain records
@@ -118,13 +164,9 @@ set_records() {
                 \"dnsrecords\": ${records}\
             }\
         }\
-    }" | jq -c)
+    }" | hjq -c)
 
-    res=$(curl -s --location --request DELETE 'https://ccp.netcup.net/run/webservice/servers/endpoint.php?JSON' \
-        --header 'Content-Type: application/json' \
-        --data "$UPDATE_PAYLOAD")
-    
-    handle_error "$res"
+    res=$(send_request "$UPDATE_PAYLOAD" $DRY_RUN)
 }
 
 # params: sid
@@ -138,13 +180,9 @@ logout() {
             \"apikey\": \"${API_KEY}\",\
             \"apisessionid\": \"${sid}\"\
         }\
-    }" | jq -c)
+    }" | hjq -c)
 
-    res=$(curl -s --location --request DELETE 'https://ccp.netcup.net/run/webservice/servers/endpoint.php?JSON' \
-        --header 'Content-Type: application/json' \
-        --data "$LOGOUT_PAYLOAD")
-    
-    handle_error "$res"
+    res=$(send_request "$LOGOUT_PAYLOAD")
 }
 
 run() {
@@ -165,7 +203,7 @@ run() {
         
         log i "getting dns records"
         records=$(get_records $sid $domain)
-        length=$(echo "$records" | jq ". | length")
+        length=$(echo "$records" | hjq ". | length")
         log s "found $normal$length$blue records"
 
         change="false"
@@ -173,20 +211,20 @@ run() {
         for ((i=0; i<length; i++)); do
             log i "processing record $normal$i"
 
-            type=$(echo "$records" | jq -r ".[$i].type")
+            type=$(echo "$records" | hjq -r ".[$i].type")
             if [[ "$type" != "A" ]]; then
                 log i "not an A record"
                 continue
             fi
 
-            hostname=$(echo "$records" | jq -r ".[$i].hostname")
+            hostname=$(echo "$records" | hjq -r ".[$i].hostname")
             regex="(^|,)$hostname(,|$)"
             if [[ ! "$RECORDS" =~ $regex ]]; then
                 log i "$normal$hostname$blue not in RECORDS"
                 continue
             fi
 
-            destination=$(echo "$records" | jq -r ".[$i].destination")
+            destination=$(echo "$records" | hjq -r ".[$i].destination")
             if [[ "$destination" == "$ip" ]]; then
                 log i "ip address unchanged"
                 continue
@@ -194,8 +232,13 @@ run() {
 
             change="true"
             log i "changing destination of $normal$hostname$blue to $normal$ip"
-            records=$(echo "$records" | jq -r ".[$i].destination|=\"$ip\"")
+            records=$(echo "$records" | hjq -r ".[$i].destination|=\"$ip\"")
         done
+
+        if [[ $DRY_RUN -eq 1 && change != "true" ]]; then
+            log d "dry running, therefor simulating a change"
+            change="true"
+        fi
 
         if [[ "$change" != "true" ]]; then
             log i "no changes were made on domain $normal$domain"
@@ -203,7 +246,7 @@ run() {
         fi
 
         log i "updating records for domain $normal$domain"
-        set_records $sid $domain $(echo "$records" | jq -c)
+        set_records $sid $domain $(echo "$records" | hjq -c)
     done
 
     log i "logging out"
