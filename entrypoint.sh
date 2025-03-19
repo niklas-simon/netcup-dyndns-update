@@ -235,7 +235,7 @@ run() {
             records=$(echo "$records" | hjq -r ".[$i].destination|=\"$ip\"")
         done
 
-        if [[ $DRY_RUN -eq 1 && change != "true" ]]; then
+        if [[ $DRY_RUN -eq 1 && $change != "true" ]]; then
             log d "dry running, therefor simulating a change"
             change="true"
         fi
@@ -246,7 +246,7 @@ run() {
         fi
 
         log i "updating records for domain $normal$domain"
-        set_records $sid $domain $(echo "$records" | hjq -c)
+        set_records $sid $domain "$(echo "$records" | hjq -c)"
     done
 
     log i "logging out"
